@@ -325,7 +325,7 @@ for col, label, ke, kd, wacc, rf, spr in [
 ]:
     with col:
         st.subheader(label)
-        m1, m2, m3 = st.columns(3)
+        m1 = m2 = m3 = st.container()  # stacked so values are never truncated
         m1.metric("Cost of equity", f"{ke*100:.2f}%")
         m2.metric("Pre-tax cost of debt", f"{kd*100:.2f}%")
         m3.metric("WACC", f"{wacc*100:.2f}%")
