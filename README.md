@@ -22,9 +22,12 @@ Source dates and fetch times are shown in the app. If a fetch fails, the app sho
 ## Formulas
 - D/E = d / (1 − d); levered beta βL = βU × [1 + (1 − t) × D/E]
 - Ke$ = rf$ + βL × ERP; Kd$ = rf$ + BBB spread
-- Foreign currency (default, parity): k_FC = (1 + k$) × (1 + rf_FC) / (1 + rf$) − 1 (an additive option k$ + rf_FC − rf$ is also available)
-- Kd_FC = parity-converted Kd$, or rf_FC + manual spread when the override is on
+- Foreign-currency cost of equity: 1 + Re* = (1 + Re) × (1 + Rf*) / (1 + Rf)
+- Foreign-currency spread: s* = s × (1 + Rf*) / (1 + Rf), Rd* = Rf* + s* (or a manual spread when the override is on)
 - WACC = (1 − d) × Ke + d × Kd × (1 − t)
+
+## Course example check (Colombia)
+βU 0.80, d 30%, τ 35%, ERP 6.5%, Rf 4.0%, Rf* 12.0%, s 1.5% → Re 10.6486% / 19.1600%, Rd 5.5000% / 13.6154%, WACC 8.5265% / 16.0670% (USD / COP). The app reproduces these exactly.
 
 ## Built-in sanity checks (verified)
 - Equal government yields → identical USD and foreign results (spread override off)

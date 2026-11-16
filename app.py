@@ -211,15 +211,12 @@ def compute(beta_u, tax, debt, erp, rf_us, rf_fc, spread_us, spread_fc_override=
     ke_us = rf_us + beta_l * erp
     kd_us = rf_us + spread_us
 
-    if method.startswith("Multiplicative"):
-        conv = lambda k: (1 + k) * (1 + rf_fc) / (1 + rf_us) - 1  # noqa: E731
-    else:
-        conv = lambda k: k + (rf_fc - rf_us)  # noqa: E731
-
-    ke_fc = conv(ke_us)
+    # Course formulas: F = (1 + Rf*) / (1 + Rf)
+    F = (1 + rf_fc) / (1 + rf_us)
+    ke_fc = (1 + ke_us) * F - 1      # 1 + Re* = (1 + Re)(1 + Rf*)/(1 + Rf)
     if spread_fc_override is None:
-        kd_fc = conv(kd_us)
-        spread_fc = kd_fc - rf_fc
+        spread_fc = spread_us * F    # s* = s (1 + Rf*)/(1 + Rf)
+        kd_fc = rf_fc + spread_fc    # Rd* = Rf* + s*
     else:
         spread_fc = spread_fc_override
         kd_fc = rf_fc + spread_fc
@@ -273,9 +270,7 @@ country = sb.selectbox("Selected country", countries,
 erp = sb.slider("Equity risk premium (%)", 0.0, 15.0, DEFAULT_ERP, 0.1)
 debt_pct = sb.slider("Target debt share D/(D+E) (%)", 0, 90, DEFAULT_DEBT, 1)
 tax_choice = sb.radio("Project tax rate", ["U.S. tax rate", "Selected-country tax rate"], index=0)
-method = sb.radio("Currency conversion of USD rates",
-                  ["Multiplicative (parity)", "Additive (yield differential)"], index=0,
-                  help="Multiplicative: (1+k$)×(1+rf_FC)/(1+rf_US)−1. Additive: k$ + (rf_FC − rf_US).")
+method = "parity"  # currency conversion follows the course formula (Fisher + relative PPP)
 
 # Fetched values
 beta_fetched = float(betas.loc[betas["Industry"] == industry, "Unlevered beta"].iloc[0])
@@ -361,9 +356,10 @@ with st.expander("Formulas and main assumptions", expanded=True):
 - **Levered beta (Hamada):** βL = βU × [1 + (1 − t) × D/E], with D/E = d / (1 − d).
 - **USD cost of equity (CAPM):** Ke$ = rf$ + βL × ERP. The ERP is a USD (mature-market) premium applied to a U.S. industry beta.
 - **USD cost of debt:** Kd$ = rf$ + BBB spread (Damodaran Baa2/BBB, large non-financial firms).
-- **Foreign-currency rates:** {"(1 + k$) × (1 + rf_FC) / (1 + rf$) − 1 (interest-rate / inflation parity)" if method.startswith("Multiplicative") else "k$ + (rf_FC − rf$) (additive yield differential)"}. Applied to Ke; applied to Kd unless the foreign spread is overridden, in which case Kd_FC = rf_FC + manual spread.
+- **Foreign-currency cost of equity:** 1 + Re* = (1 + Re) × (1 + Rf*) / (1 + Rf). Fisher equation + relative PPP: the adjustment reflects the currency's expected depreciation.
+- **Foreign-currency cost of debt:** s* = s × (1 + Rf*) / (1 + Rf) and Rd* = Rf* + s*, unless the foreign spread is overridden manually.
 - **WACC:** E/V × Ke + D/V × Kd × (1 − t), same debt share, tax rate and ERP in both currencies.
-- The 10-year government yields are treated as risk-free in each currency; the yield gap captures expected inflation differences (no separate country risk premium is added).
+- **Key approximations:** risk is measured relative to the U.S. market; U.S. industry betas proxy for project risk; 10-year government yields are risk-free proxies (they include term and liquidity premia and possibly sovereign default risk); equal real rates and relative PPP link yields to expected depreciation; no separate country equity premium; target leverage is constant, interest deductions are fully usable, and unlevering assumes zero debt beta.
 - Tax rates are OECD combined (central + sub-central) statutory CIT rates, latest year available.
 """)
 
