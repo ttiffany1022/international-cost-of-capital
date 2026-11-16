@@ -34,6 +34,11 @@ OECD_API_URL = (
     "?startPeriod=2020&format=csvfilewithlabels"
 )
 TE_URL = "https://tradingeconomics.com/bonds"
+# Backup for yields: OECD long-term (10Y) government bond rates, monthly
+OECD_LTR_URL = (
+    "https://sdmx.oecd.org/public/rest/data/OECD.SDD.STES,DSD_STES@DF_FINMARK,/.M.IRLT.PA....."
+    "?startPeriod=2025-01&format=csvfilewithlabels"
+)
 
 HEADERS = {
     "User-Agent": (
@@ -140,8 +145,7 @@ def fetch_tax_rates():
     return out.set_index("Country"), now_utc()
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_yields():
+def _te_yields():
     r = requests.get(TE_URL, headers=HEADERS, timeout=30)
     r.raise_for_status()
     tables = pd.read_html(io.StringIO(r.text))
@@ -163,7 +167,29 @@ def fetch_yields():
     if not rows:
         raise ValueError("No yield tables found on Trading Economics")
     out = pd.concat(rows).dropna(subset=["Yield"]).drop_duplicates("Country")
-    return out.set_index("Country"), now_utc()
+    return out.set_index("Country")
+
+
+def _oecd_yields():
+    r = requests.get(OECD_LTR_URL, headers=HEADERS, timeout=60)
+    r.raise_for_status()
+    df = pd.read_csv(io.StringIO(r.text)).dropna(subset=["OBS_VALUE"])
+    latest = df.sort_values("TIME_PERIOD").groupby("Reference area").tail(1)
+    out = pd.DataFrame({"Country": latest["Reference area"].replace(OECD_TO_TE).values,
+                        "Yield": latest["OBS_VALUE"].astype(float).values,
+                        "As of": latest["TIME_PERIOD"].astype(str).values})
+    return out.set_index("Country")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_yields():
+    """Trading Economics first. TE sits behind a bot challenge that often blocks
+    cloud servers, so fall back to OECD monthly 10Y government bond yields."""
+    try:
+        return _te_yields(), now_utc(), "Trading Economics bonds"
+    except Exception as e:  # noqa: BLE001
+        te_err = f"{type(e).__name__}: {e}"
+    return _oecd_yields(), now_utc(), f"OECD long-term interest rates (backup; Trading Economics blocked: {te_err})"
 
 
 def safe(fn):
@@ -372,7 +398,8 @@ src = pd.DataFrame([
       + (f", {country} year {taxes.loc[country,'Year']}" if tax_fc_available else f", {country}: not in OECD data")
       + (f" · fetched {tax_res[1]}" if tax_res else " · FALLBACK")),
      "Manual" if (o2 or o3) else "Fetched"],
-    ["10Y government yields", "Trading Economics bonds", TE_URL,
+    ["10Y government yields", (yld_res[2] if yld_res else "Trading Economics bonds"),
+     (TE_URL if (not yld_res or yld_res[2].startswith("Trading")) else OECD_LTR_URL),
      (f"US as of {yields.loc['United States','As of'] if 'United States' in yields.index else 'n/a'}, "
       f"{country} as of {yields.loc[country,'As of'] if country in yields.index else 'n/a'} · fetched {yld_res[1]}"
       if yld_res else "FALLBACK"), "Manual" if (o5 or o6) else "Fetched"],
